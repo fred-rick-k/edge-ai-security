@@ -1,0 +1,105 @@
+# docker-compose.yml — Control Plane Services
+# Services: Vault Enterprise, PostgreSQL 16
+#
+# Requires: .env file at repo root with VAULT_LICENSE_STRING=<key>
+# (gitignored — never commit the license key)
+#
+# Usage:
+#   make up-mac        — start all services
+#   make down-mac      — stop and remove containers (volumes preserved)
+#   make vault-status  — check Vault seal status
+#
+# Vault is left sealed after first start; run `make setup-vault`
+# to initialise, unseal, and provision engines/policies.
+
+services:
+
+  # ── PostgreSQL 16 ────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: unless-stopped
+    # T-37: the superuser name, password and database come from .env. There is no password
+    # fallback: compose aborts if POSTGRES_PASSWORD is unset or empty. The password is only
+    # applied when the data volume is first initialised.
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./vault/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── HashiCorp Vault Enterprise ───────────────────────────────────────────────
+  # Storage: Raft (single-node). License loaded from .env → VAULT_LICENSE.
+  # The vault-data volume is chowned to uid 100 (vault user) before start.
+  vault:
+    # Pinned to 2.2.0-ent (GA image confirmed on Docker Hub 2026-10-15).
+    # cap_add: IPC_LOCK removed — breaking change landed in v2.0.2; disable_mlock=true.
+    image: hashicorp/vault-enterprise:2.2.0-ent
+    container_name: vault
+    restart: unless-stopped
+    # Run as root so the native entrypoint can chown /vault/config + /vault/logs
+    # + /vault/file, then su-exec to vault. We also chown /vault/data (Raft)
+    # ourselves since the official entrypoint doesn't cover it.
+    user: "0"
+    env_file:
+      - .env                  # provides VAULT_LICENSE
+    environment:
+      # Vault reads only VAULT_LICENSE / VAULT_LICENSE_PATH (documented autoload order:
+      # https://developer.hashicorp.com/vault/docs/enterprise/license/autoloading). .env carries the key as
+      # VAULT_LICENSE_STRING (see .env.example), so map it here; without this a RECREATED container
+      # fails with "no autoloaded license provided" (seen 2026-11-03 after `make up-mac`).
+      # The VAULT_LICENSE_PATH variant is not mounted by this file.
+      VAULT_LICENSE: ${VAULT_LICENSE_STRING:-${VAULT_LICENSE:-}}
+      # setcap is not available in Docker Desktop on Mac; mlock is disabled anyway.
+      SKIP_SETCAP: "1"
+      VAULT_LOCAL_CONFIG: |
+        ui            = true
+        disable_mlock = true
+
+        storage "raft" {
+          path    = "/vault/data"
+          node_id = "mac-node-1"
+        }
+
+        listener "tcp" {
+          address       = "0.0.0.0:8200"
+          tls_cert_file = "/vault/tls/vault.crt"
+          tls_key_file  = "/vault/tls/vault.key"
+          # tls_require_and_verify_client_cert is NOT set — client certs are
+          # optional at the TLS layer.  auth/tpm/login presents the TPM client
+          # cert in the TLS handshake; Vault accepts but does not mandate it
+          # for all connections.  Removing tls_disable_client_certs (which was
+          # blocking the cert from being passed) is sufficient.
+        }
+
+        api_addr     = "${VAULT_ADDR:-https://192.0.2.10:8200}"
+        cluster_addr = "https://vault:8201"
+      VAULT_LOG_LEVEL: info
+    ports:
+      - "${VAULT_PORT:-8200}:8200"
+      - "8201:8201"
+    volumes:
+      - vault-data:/vault/data
+      - ./tls:/vault/tls:ro
+      - ./vault/logs:/vault/logs
+    # Pre-chown /vault/data for Raft and create/chown /vault/logs, then hand off to the official entrypoint.
+    entrypoint: ["sh", "-c", "chown -R vault:vault /vault/data && mkdir -p /vault/logs && chown -R vault:vault /vault/logs && exec /usr/local/bin/docker-entrypoint.sh server"]
+    healthcheck:
+      # TPM auth requires TLS — Vault now serves https on :8200.
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- 'https://127.0.0.1:8200/v1/sys/health?uninitcode=200&sealedcode=200&standbycode=200' | grep -q 'initialized' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  postgres-data:
+  vault-data:

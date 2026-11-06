@@ -1,0 +1,75 @@
+Edge AI security demo
+Copyright 2026 IBM
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+TRADEMARKS
+NVIDIA, Jetson, Orin, JetPack, Cosmos and OpenShell are trademarks or
+registered trademarks of NVIDIA Corporation. HashiCorp and Vault are
+trademarks or registered trademarks of HashiCorp, Inc. IBM is a trademark of
+International Business Machines Corporation. Docker is a trademark of
+Docker, Inc. Linux is a trademark of Linus Torvalds. All other names are the
+property of their respective owners. They are used here only to identify the
+products this demo works with. This project is not affiliated with, endorsed
+by or sponsored by any of those companies, unless stated otherwise by the
+repository owner.
+
+THIRD-PARTY COMPONENTS
+This repository does not contain these components. The setup scripts download
+them, and each is governed by its own licence. Licence information below was
+read from the upstream sources on 2026-10-22.
+
+- OpenShell (NVIDIA): Apache License 2.0.
+  https://github.com/NVIDIA/OpenShell (LICENSE)
+- llama.cpp (ggml authors): MIT License.
+  https://github.com/ggml-org/llama.cpp (LICENSE)
+- Cosmos-Reason2-2B GGUF quantisations (Kbenkhaled/Cosmos-Reason2-2B-GGUF,
+  derived from nvidia/Cosmos-Reason2-2B, itself post-trained from
+  Qwen3-VL-2B-Instruct): the model card declares "license: other" with the
+  NVIDIA Open Model License.
+  https://huggingface.co/Kbenkhaled/Cosmos-Reason2-2B-GGUF
+  https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license
+  Read the licence before you download or use the model weights.
+- HashiCorp Vault Enterprise (container hashicorp/vault-enterprise): a
+  commercial product that needs a valid licence from HashiCorp. No licence is
+  included here.
+- PostgreSQL (container postgres): PostgreSQL License.
+  (Not re-read from upstream for this notice.)
+
+PYTHON PACKAGES
+The setup scripts install these with pip from PyPI (ui/, edge/ and agent/
+requirements.txt). The licence column is what the PyPI metadata of the latest
+release declared on 2026-10-22; the requirements files use ">=" so the
+installed version can differ. Check the licence of the version you install.
+
+- aiohttp: Apache-2.0 AND MIT
+- aiohttp-cors: Apache-2.0
+- opencv-python-headless: Apache-2.0 (the wheel also bundles other libraries
+  with their own licences; not reviewed)
+- jetson-stats (jtop): AGPL-3.0. Read the licence before you redistribute or
+  offer a modified version of this demo over a network; ui/jetson_telemetry.py
+  imports it when it is installed.
+- Pillow: MIT-CMU
+- numpy: BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0
+- python-dotenv: BSD-3-Clause
+- requests: Apache-2.0
+- cryptography: Apache-2.0 OR BSD-3-Clause
+- psycopg2-binary: LGPL with exceptions
+
+The WebUI (ui/static): a search on 2026-10-22 found no licence or copyright
+header, no minified or vendored library, no web font and no script, style or
+font URL pointing to another site (index.html loads only /static/*). The files
+appear to be written for this demo; that is inferred from the search, not
+confirmed with the author.
+
+NOT ESTABLISHED
+- The licence of the container image ghcr.io/nvidia-ai-iot/llama_cpp
+  (the llama.cpp build for Jetson used by this demo). Its GitHub package page
+  shows no licence, and the image has only the label
+  org.opencontainers.image.version=24.04. The image is probably built from
+  github.com/dusty-nv/jetson-containers, whose repository licence GitHub
+  reports as "other / NOASSERTION"; that link is not confirmed. Check the
+  registry page and that repository before you redistribute the image. This
+  repository does not redistribute it.
+- The licences of the libraries bundled inside the Python wheels, and of the
+  operating-system packages that the scripts install with apt.

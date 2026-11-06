@@ -1,0 +1,16 @@
+# edge/requirements.txt
+# Dependencies for trusted-edge (edge/trusted_edge.py).
+# Installed on the Jetson by scripts/13-install-trusted-edge.sh into /opt/trusted-edge/venv.
+# Same pins as agent/requirements.txt: no GPU/CUDA is used, so generic aarch64 PyPI wheels apply.
+
+# Vault HTTP API client.
+requests>=2.32.4
+
+# PostgreSQL driver (events INSERT with the Vault dynamic credential).
+psycopg2-binary>=2.9.9
+
+# AES-256-GCM envelope encryption with the Transit datakey.
+cryptography>=44.0.0
+
+# RTSP capture (FFMPEG backend) + JPEG encode; headless build, no GUI deps.
+opencv-python-headless>=4.8.0

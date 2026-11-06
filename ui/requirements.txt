@@ -1,0 +1,12 @@
+# WebUI Backend Dependencies for Jetson Orin Nano
+aiohttp>=3.10.11
+aiohttp-cors>=0.7.0
+opencv-python-headless>=4.8.0
+jetson-stats>=4.2.0
+Pillow>=10.3.0
+numpy>=1.24.0
+python-dotenv>=1.0.0
+requests>=2.32.4
+
+# Session 5-3b: AES-256-GCM decrypt of event payloads in /api/vault/decrypt
+cryptography>=44.0.0

@@ -1,0 +1,13 @@
+# agent/requirements.txt
+# Dependencies for the camera agent running inside the OpenShell sandbox.
+#
+# Session 3-5i: the agent no longer touches Vault, PostgreSQL, OpenCV or the
+# Transit DEK.  Encryption, DB writes and RTSP capture all happen in
+# trusted-edge.service on the host.
+#
+# Pillow is needed for motion detection (64×64 grayscale MAD). The venv does
+# NOT inherit system site-packages, so even though python3-pil is installed
+# system-wide in the image, it must also be in the venv.
+
+requests>=2.32.4
+Pillow>=10.3.0

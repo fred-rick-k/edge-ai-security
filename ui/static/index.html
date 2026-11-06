@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jetson Edge Security Demo — Live VLM & Telemetry</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2376b900'><path d='M12 2L2 7l10 5 10-5-10-5zm0 9l-10-5v11l10 5 10-5V6l-10 5z'/></svg>">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="top-nav">
+      <span class="site-title">EDGE AI SECURITY</span>
+      <span class="nvidia-badge">NVIDIA Jetson Orin Nano Super &nbsp;·&nbsp; OpenShell &nbsp;·&nbsp; HashiCorp Vault &nbsp;·&nbsp; TPM 2.0</span>
+    </header>
+
+    <!-- Tab bar (Session 5-3a). Tab 4 is feature-flagged: hidden unless
+         window.__featureAnomalyEngine === true or body[data-feature-anomaly-engine="true"]. -->
+    <nav class="tab-bar" id="tab-bar" role="tablist" aria-label="Dashboard sections">
+      <button type="button" class="tab-btn tab-active" role="tab" id="tab-btn-live" data-tab="live" aria-controls="tab-live" aria-selected="true">Live</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-btn-security" data-tab="security" aria-controls="tab-security" aria-selected="false">Security Audit</button>
+      <button type="button" class="tab-btn" role="tab" id="tab-btn-architecture" data-tab="architecture" aria-controls="tab-architecture" aria-selected="false">Architecture</button>
+      <button type="button" class="tab-btn hidden" role="tab" id="tab-btn-anomaly" data-tab="anomaly" data-feature="anomaly" aria-controls="tab-anomaly" aria-selected="false">Anomaly Engine</button>
+    </nav>
+
+    <main class="tab-panes">
+
+    <!-- Tab 1: Live -->
+    <div class="tab-pane tab-active" id="tab-live" role="tabpanel" aria-labelledby="tab-btn-live">
+
+    <div class="dashboard-grid">
+      
+      <!-- Left Column: Video Ingest & Quick Prompts -->
+      <section class="card video-card">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>Live Camera Stream (RTSP / Ingest)</h2>
+            <span class="badge" id="camera-stream-badge">LIVE STREAM</span>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-snapshot">Capture Frame</button>
+            <button class="btn btn-secondary btn-sm" id="btn-refresh-stream">Reconnect</button>
+          </div>
+        </div>
+
+        <div class="video-container">
+          <img id="camera-stream" src="/video_feed" alt="Live Camera Feed" crossorigin="anonymous">
+          <div class="video-overlay" id="video-overlay">
+            <span class="overlay-tag" id="stream-fps">15 FPS</span>
+            <span class="overlay-tag" id="stream-resolution">HD 720p</span>
+            <span class="overlay-tag highlight" id="overlay-status">MONITORING</span>
+          </div>
+        </div>
+
+        <!-- Quick Prompt Buttons -->
+        <div class="quick-prompts">
+          <span class="section-label">Object Inference Presets:</span>
+          <div class="btn-group">
+            <button class="btn btn-preset" data-prompt="Identify and name the specific object being held up or shown to the camera. State what it is clearly.">
+              🔍 Identify Object Held
+            </button>
+            <button class="btn btn-preset" data-prompt="Inspect the object shown to the camera in detail: describe its color, shape, material, and any visible text or brand markings.">
+              🔎 Inspect Details & Text
+            </button>
+            <button class="btn btn-preset" data-prompt="Explain what the object held up to the camera is used for and provide physical reasoning about its function.">
+              🧠 Object Function & Reasoning
+            </button>
+          </div>
+        </div>
+
+        <!-- Prompt Input Form -->
+        <div class="prompt-box">
+          <textarea id="prompt-input" rows="2" placeholder="Ask Cosmos-Reason2 about the object in front of the camera (e.g. 'What object am I holding?')" spellcheck="false"></textarea>
+          <div class="prompt-actions">
+            <div class="param-row">
+              <label>Temp: <span id="temp-val">0.0</span></label>
+              <input type="range" id="temp-slider" min="0" max="1" step="0.1" value="0.0" style="width:70px">
+              <label style="margin-left:8px">Interval:</label>
+              <select id="auto-interval" class="select-sm">
+                <option value="2.0" selected>2.0s (Fast)</option>
+                <option value="5.0">5.0s (Normal)</option>
+              </select>
+            </div>
+            <div class="btn-actions-group">
+              <button class="btn btn-primary" id="btn-submit-prompt">Run Once</button>
+              <button class="btn btn-auto" id="btn-toggle-auto">▶ Auto Loop (2s)</button>
+              <button class="btn btn-danger hidden" id="btn-stop-prompt">Stop</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column Top: VLM Inference Results -->
+      <section class="card inference-card">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>Cosmos-Reason2 Physical Reasoning</h2>
+            <span class="badge badge-accent" id="inference-status-badge">READY</span>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-clear-output">Clear Output</button>
+          </div>
+        </div>
+
+        <!-- Main Answer Display -->
+        <div class="inference-output-wrap">
+          <div class="inference-output" id="inference-output">
+            <div class="empty-state">
+              <svg viewBox="0 0 24 24" width="36" height="36" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+              </svg>
+              <p>Click a Quick Action or enter a custom prompt above to query Cosmos-Reason2 on the live camera feed.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Performance Stats Footer -->
+        <div class="inference-metrics">
+          <div class="metric-item">
+            <span class="metric-label">TTFT:</span>
+            <span class="metric-value" id="stat-ttft">— ms</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Tokens:</span>
+            <span class="metric-value" id="stat-tokens">—</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Speed:</span>
+            <span class="metric-value" id="stat-speed">— tok/s</span>
+          </div>
+          <div class="metric-item">
+            <span class="metric-label">Latency:</span>
+            <span class="metric-value" id="stat-latency">— s</span>
+          </div>
+        </div>
+
+        <!-- Recent Event Timeline -->
+        <div class="event-timeline">
+          <div class="timeline-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <span>Recent Physical Event Detections</span>
+              <span class="timeline-count" id="event-count">0 events</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <button class="btn btn-secondary btn-sm" id="btn-decrypt-toggle" aria-pressed="false" style="padding:2px 8px; font-size:11px;">🔓 Decrypt stored events</button>
+              <button class="btn btn-secondary btn-sm" id="btn-clear-events" style="padding:2px 8px; font-size:11px;">Clear Events</button>
+            </div>
+          </div>
+          <div class="timeline-list" id="timeline-list">
+            <div class="timeline-empty">Continuous analysis events will appear here in real time.</div>
+          </div>
+          <!-- Session 5-3b, Widget 3: stored (Vault-encrypted) events, shown only while the decrypt toggle is on -->
+          <div class="stored-events" id="stored-events">
+            <div class="stored-events-head">
+              <span>Stored events (PostgreSQL)</span>
+              <span class="badge badge-accent hidden" id="decrypt-badge">decrypted via control-plane Transit role</span>
+            </div>
+            <div class="stored-events-list" id="stored-events-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Bottom Span: Hardware Telemetry Dashboard (jetson-stats) -->
+      <section class="card telemetry-card full-width">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>NVIDIA Orin Nano Hardware Telemetry</h2>
+            <span class="badge" id="telemetry-mode-badge">MAXN_SUPER (Mode 2)</span>
+          </div>
+          <div class="header-legend">
+            <span class="legend-item"><span class="legend-box color-gpu"></span> GPU (GR3D)</span>
+            <span class="legend-item"><span class="legend-box color-ram"></span> Unified VRAM</span>
+            <span class="legend-item"><span class="legend-box color-power"></span> Power (W)</span>
+          </div>
+        </div>
+        <div class="telemetry-status-row">
+          <div class="status-pill" id="vlm-status-pill">
+            <span class="status-dot green"></span>
+            <span class="status-text">VLM :8090 (Active)</span>
+          </div>
+          <div class="status-pill" id="telemetry-status-pill">
+            <span class="status-dot green"></span>
+            <span class="status-text">Telemetry 2Hz</span>
+          </div>
+          <div class="status-pill" id="swap-status-pill">
+            <span class="status-dot green"></span>
+            <span class="status-text">Swap: 0 MB (Enforced)</span>
+          </div>
+        </div>
+
+        <div class="telemetry-grid">
+          <!-- GPU Sparkline Card -->
+          <div class="telemetry-tile">
+            <div class="tile-header">
+              <span class="tile-title">GPU Engine (GR3D)</span>
+              <span class="tile-value" id="val-gpu">0%</span>
+            </div>
+            <div class="sparkline-wrapper">
+              <canvas id="spark-gpu" width="300" height="60"></canvas>
+            </div>
+            <div class="tile-footer">
+              <span id="val-emc">EMC Load: 0%</span>
+              <span id="val-temp-gpu">GPU Temp: —°C</span>
+            </div>
+          </div>
+
+          <!-- Unified VRAM / RAM Card -->
+          <div class="telemetry-tile">
+            <div class="tile-header">
+              <span class="tile-title">Unified RAM (Shared VRAM)</span>
+              <span class="tile-value" id="val-ram-pct">0%</span>
+            </div>
+            <div class="sparkline-wrapper">
+              <canvas id="spark-ram" width="300" height="60"></canvas>
+            </div>
+            <div class="tile-footer">
+              <span id="val-ram-used">Used: — GB</span>
+              <span id="val-ram-avail">Avail: — GB</span>
+            </div>
+          </div>
+
+          <!-- Board Power Card -->
+          <div class="telemetry-tile">
+            <div class="tile-header">
+              <span class="tile-title">Board Power Consumption</span>
+              <span class="tile-value" id="val-power">0.0 W</span>
+            </div>
+            <div class="sparkline-wrapper">
+              <canvas id="spark-power" width="300" height="60"></canvas>
+            </div>
+            <div class="tile-footer">
+              <span id="val-power-cap">Budget: 25W MAXN</span>
+              <span id="val-temp-ao">AO Temp: —°C</span>
+            </div>
+          </div>
+
+          <!-- CPU Cores Card -->
+          <div class="telemetry-tile">
+            <div class="tile-header">
+              <span class="tile-title">CPU (6x Cortex-A78AE)</span>
+              <span class="tile-value" id="val-cpu-overall">0%</span>
+            </div>
+            <div class="cpu-bars" id="cpu-bars-container">
+              <!-- Dynamically populated core bars -->
+            </div>
+            <div class="tile-footer">
+              <span id="val-temp-cpu">CPU Temp: —°C</span>
+              <span id="val-swap">Swap: 0 kB</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+    </div><!-- /tab-live -->
+
+    <!-- Tab 2: Security Audit -->
+    <div class="tab-pane" id="tab-security" role="tabpanel" aria-labelledby="tab-btn-security">
+
+      <!-- Session 5-3b, Widget 1: Hardware-Rooted Identity strip -->
+      <section class="identity-strip" id="identity-strip" aria-label="Vault token identity">
+        <div class="identity-cell" id="idc-edge" data-who="edge">
+          <div class="idc-head"><span class="idc-role">Edge token</span><span class="badge badge-accent">TPM-rooted</span></div>
+          <div class="idc-name" id="idc-edge-name">—</div>
+          <div class="idc-policies" id="idc-edge-policies"></div>
+          <div class="idc-ttl"><span class="idc-ttl-label">TTL</span> <span class="idc-ttl-value" id="idc-edge-ttl">—</span></div>
+        </div>
+        <div class="identity-cell" id="idc-gateway" data-who="gateway">
+          <div class="idc-head"><span class="idc-role">Gateway token</span><span class="badge badge-accent">TPM-rooted</span></div>
+          <div class="idc-name" id="idc-gateway-name">—</div>
+          <div class="idc-policies" id="idc-gateway-policies"></div>
+          <div class="idc-ttl"><span class="idc-ttl-label">TTL</span> <span class="idc-ttl-value" id="idc-gateway-ttl">—</span></div>
+        </div>
+      </section>
+
+      <!-- Session 5-3b, Widget 2: Vault Dynamic Credentials -->
+      <section class="card cred-tile" id="cred-tile">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>Vault Dynamic Credentials</h2>
+            <span class="badge badge-accent">PostgreSQL · 5 min lease</span>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-rotate-secret">Rotate Secret Now</button>
+          </div>
+        </div>
+        <div class="cred-body">
+          <div class="cred-row"><span class="cred-label">Active DB user</span><code class="cred-user" id="cred-username">—</code></div>
+          <div class="cred-row">
+            <span class="cred-label">Lease TTL</span>
+            <div class="cred-bar"><div class="cred-bar-fill" id="cred-bar-fill"></div></div>
+            <span class="cred-ttl" id="cred-ttl">—</span>
+          </div>
+          <div class="cred-result hidden" id="cred-result"></div>
+        </div>
+      </section>
+
+      <!-- Test any URL (Session 3-6) — Repositioned as a first-class card -->
+      <section class="card testurl-section full-width" id="testurl-section">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>🧪 Test any URL from the sandbox</h2>
+            <span class="badge badge-accent">camera-agent sandbox</span>
+          </div>
+        </div>
+        <div class="testurl-card-body">
+          <p class="testurl-desc">
+            Enter any URL — the request runs <em>inside</em> the <code>camera-agent</code> sandbox.
+            The sandbox policy either allows or blocks it; the real supervisor deny line is shown as proof.
+          </p>
+          <div class="testurl-examples">
+            <span class="testurl-example-label">Quick examples:</span>
+            <button class="btn btn-secondary btn-sm testurl-example" data-url="http://jetson.localdomain:8090/health">✅ VLM :8090 /health (allowed)</button>
+            <button class="btn btn-secondary btn-sm testurl-example" data-url="http://jetson.localdomain:8095/frame.jpg">✅ Ingest :8095 /frame.jpg (allowed)</button>
+            <button class="btn btn-secondary btn-sm testurl-example" data-url="https://evil.com">🚫 evil.com (blocked)</button>
+            <button class="btn btn-secondary btn-sm testurl-example" data-url="http://192.168.1.1">🚫 RFC1918 (blocked)</button>
+            <button class="btn btn-secondary btn-sm testurl-example" data-url="http://169.254.169.254/latest/meta-data/">🚫 IMDS (blocked)</button>
+          </div>
+          <div class="testurl-input-row">
+            <input type="text" id="testurl-input" class="testurl-input" placeholder="https://example.com" maxlength="2048" spellcheck="false" autocomplete="off">
+            <button class="btn btn-primary" id="btn-test-url">Test from sandbox</button>
+          </div>
+          <div id="testurl-result" class="testurl-result hidden">
+            <div class="testurl-verdict-row">
+              <span id="testurl-verdict-badge" class="testurl-verdict"></span>
+              <span id="testurl-http-code" class="testurl-http-code"></span>
+            </div>
+            <div id="testurl-deny-line" class="testurl-deny-line hidden"></div>
+            <div id="testurl-error-msg" class="testurl-error hidden"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- OpenShell Sandbox Card (full-width) -->
+      <section class="card openshell-card full-width" id="openshell-card">
+        <div class="card-header">
+          <div class="header-left">
+            <h2>NVIDIA OpenShell Sandbox: camera-agent</h2>
+            <span class="badge badge-openshell" id="openshell-status-badge">LOADING…</span>
+          </div>
+          <div class="header-actions">
+            <button class="btn btn-secondary btn-sm" id="btn-openshell-refresh">↺ Refresh</button>
+          </div>
+        </div>
+
+        <div class="openshell-grid">
+
+          <!-- Policy Summary -->
+          <div class="openshell-section">
+            <div class="openshell-section-title">
+              <span class="openshell-icon">🔒</span> Policy Summary
+            </div>
+
+            <div class="openshell-subsection-label">Landlock filesystem (<span id="os-landlock">—</span>)</div>
+            <table class="openshell-table" id="os-fs-table">
+              <thead><tr><th>Path</th><th>Access</th></tr></thead>
+              <tbody id="os-fs-tbody"><tr><td colspan="2" class="loading-cell">Loading…</td></tr></tbody>
+            </table>
+
+            <div class="openshell-subsection-label" style="margin-top:10px;">Network policy (provider-derived, L7 enforced)</div>
+            <table class="openshell-table" id="os-net-table">
+              <thead><tr><th>Policy</th><th>Host:Port</th><th>Allowed requests</th><th>Binary</th></tr></thead>
+              <tbody id="os-net-tbody"><tr><td colspan="4" class="loading-cell">Loading…</td></tr></tbody>
+            </table>
+
+            <div class="openshell-subsection-label" style="margin-top:10px;">Providers (credential key names only)</div>
+            <table class="openshell-table" id="os-creds-table">
+              <thead><tr><th>Provider</th><th>Credential keys</th></tr></thead>
+              <tbody id="os-creds-tbody"><tr><td colspan="2" class="loading-cell">Loading…</td></tr></tbody>
+            </table>
+
+            <div class="openshell-subsection-label" style="margin-top:10px;">Effective policy</div>
+            <div class="openshell-mono" id="os-binary-pin">Loading…</div>
+          </div>
+
+          <!-- Agent Events (journal) -->
+          <div class="openshell-section">
+            <div class="openshell-section-title">
+              <span class="openshell-icon">📋</span> Gateway / Agent Events
+              <span class="os-gateway-status" id="os-gateway-status"></span>
+              <span class="openshell-event-count" id="os-event-count"></span>
+            </div>
+            <div class="openshell-log-box" id="os-events-log">
+              <span class="os-placeholder">Agent journal events will appear here…</span>
+            </div>
+          </div>
+
+          <!-- Dual Audit Log Panels (Session 5-4) -->
+          <div class="dual-logs-container">
+            <!-- Sandbox log (OCSF) -->
+            <div class="openshell-section">
+              <div class="openshell-section-title">
+                <span class="openshell-icon">🛡️</span> Sandbox log (OCSF)
+                <span class="openshell-deny-count" id="os-deny-count"></span>
+                <button type="button" class="btn btn-secondary btn-sm os-filter-btn" id="os-deny-filter" aria-pressed="false">Show DENIED only</button>
+              </div>
+              <div class="openshell-log-box" id="os-audit-log">
+                <span class="os-placeholder">Sandbox log entries will appear here…</span>
+              </div>
+            </div>
+
+            <!-- Vault Audit Log -->
+            <div class="openshell-section">
+              <div class="openshell-section-title">
+                <span class="openshell-icon">🔒</span> Vault Audit Log
+                <span class="vault-skew-status" id="vault-skew-status"></span>
+              </div>
+              <div class="openshell-log-box" id="vault-audit-log">
+                <span class="os-placeholder">Vault audit log entries will appear here…</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div><!-- /tab-security -->
+
+    <!-- Tab 3: Architecture & Credential Flow (Session 5-3c) -->
+    <!-- Content injected by arch-anim.js; arch-scene.js is the data source.
+         No live infrastructure calls originate from this tab.
+         No CDN, no external assets, no fetch()/XHR/WebSocket in arch-*.js. -->
+    <div class="tab-pane" id="tab-architecture" role="tabpanel" aria-labelledby="tab-btn-architecture">
+      <!-- arch-anim.js replaces this placeholder at DOMContentLoaded -->
+      <div class="tab-placeholder" aria-hidden="true">Architecture &amp; Credential Flow — loading…</div>
+    </div>
+
+    <!-- Tab 4: Anomaly Engine (placeholder until Session 8-1; feature-flagged) -->
+    <div class="tab-pane" id="tab-anomaly" role="tabpanel" aria-labelledby="tab-btn-anomaly" data-feature="anomaly">
+      <div class="tab-placeholder">Anomaly Engine — coming in Session 8-1</div>
+    </div>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <!-- Tab 3 scripts loaded after app.js; arch-scene.js must precede arch-anim.js -->
+  <script src="/static/arch-scene.js"></script>
+  <script src="/static/arch-anim.js"></script>
+</body>
+</html>

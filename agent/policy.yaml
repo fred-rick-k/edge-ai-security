@@ -1,0 +1,77 @@
+# agent/policy.yaml
+# OpenShell v0.1.4 sandbox policy for the home camera AI agent.
+#
+# Loaded by the gateway at `openshell sandbox create --policy agent/policy.yaml`.
+# Schema: https://docs.nvidia.com/openshell/latest/how-it-works/policies/schema.md
+#
+# How enforcement works (docker compute driver, measured/documented):
+#   - The workload container has network_mode=none. A seccomp user-notification
+#     broker sends every TCP/DNS operation to the supervisor companion container,
+#     which allows it only if a network_policies rule matches destination + binary.
+#   - Filesystem: Landlock (hard_requirement: the sandbox refuses to start if it
+#     cannot be applied).
+#   - A denied connection is logged by the supervisor (`NET:OPEN ... DENIED`),
+#     readable with `openshell logs <sandbox> --source sandbox`.
+#
+# Credentials are NOT in this file (verified 3-5h). Real secrets are attached as
+# gateway providers:
+#   • edge-ingest  — X-Edge-Key header injection for trusted-edge.service
+#   • cosmos-vlm   — inference provider for llama-server on :8090
+# The sandbox holds only opaque `openshell:resolve:env:KEY` placeholders.
+# The hand-written `vlm`, `vault` and `postgres` rules were removed in Session 3-5h.
+# The sandbox no longer needs Vault or PostgreSQL: trusted-edge holds the RTSP URL,
+# DEK and DB credential; the agent only talks to trusted-edge and the VLM.
+#
+# DNS names, not IP literals (measured 2026-10-16, Session 3-4b): the gateway REJECTS a
+#   `protocol: tcp` endpoint whose host is an IP literal. The LAN resolver answers
+#   m.localdomain -> <mac-ip> and jetson.localdomain -> <jetson-ip> (this host).
+#
+# Network rules in this file supply the BASE policy. Provider-derived `_provider_*`
+# entries are added at sandbox create time (from --provider edge-ingest and
+# --provider cosmos-vlm). Run `openshell policy get <sandbox> --full` to see the
+# composed effective policy.
+
+version: 1
+
+filesystem_policy:
+  include_workdir: true          # /sandbox (read-write scratch, owned by uid 1000)
+  read_only:
+    - /usr
+    - /lib
+    - /bin
+    - /etc
+    - /proc
+    - /var/log
+    - /dev/urandom
+    - /app                       # agent code baked into the image
+    - /opt/agent-venv            # python venv with agent dependencies
+  read_write:
+    - /tmp
+    - /dev/null
+
+landlock:
+  compatibility: hard_requirement   # fail closed if Landlock cannot be enforced
+
+process:
+  run_as_user: "1000"
+  run_as_group: "1000"
+
+# network_policies base — the sandbox also gets provider-derived rules from
+# --provider edge-ingest and --provider cosmos-vlm at create time.
+# Neither Vault nor PostgreSQL are listed here: the agent no longer touches them.
+#
+# Optional L4 fallback for the VLM (commented out — leave disabled unless the
+# L7 `cosmos-vlm` profile shows unacceptable latency overhead in Session 3-5i).
+# To enable: uncomment this block, create the sandbox without --provider cosmos-vlm.
+#
+# network_policies:
+#   vlm_l4_fallback:
+#     # L4-only rule (no protocol: rest); the binary-path match still applies.
+#     endpoints:
+#       - host: jetson.localdomain
+#         port: 8090
+#     binaries:
+#       - path: /usr/bin/python3.12
+
+# Everything else is denied by default. The camera endpoint is covered by the
+# edge-ingest provider profile (jetson.localdomain:8095, GET /frame.jpg, POST /events, POST /snapshot).
