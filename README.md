@@ -217,6 +217,7 @@ Known accepted weaknesses in this PoC (full register in [`THREAT_MODEL.md`](THRE
 - **VLM prompt injection** — event types are allow-listed, but raw VLM output is untrusted text parsed by keywords ([T-12](THREAT_MODEL.md#t-12))
 - **Dynamic DB lease lifetime** — short-lived 5-minute TTL window before Vault revokes leaked credentials ([T-03](THREAT_MODEL.md#t-03))
 - **Physical security** — device storage and unified memory are not full-disk encrypted; no secure boot enforcement ([T-18](THREAT_MODEL.md#t-18))
+- **Device attestation only** — the TPM proves which enrolled chip answers, not that the platform is untampered; no measured boot or PCR check, and the EK is not verified against a manufacturer certificate chain ([T-43](THREAT_MODEL.md#t-43))
 
 ---
 
